@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAEIDHM - تحليل البيانات</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Cairo', sans-serif;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+        
+        .filter-panel {
+            transition: all 0.3s ease;
+        }
+        
+        .print-only {
+            display: none;
+        }
+        
+        @media print {
+            .no-print, .no-print * {
+                display: none !important;
+            }
+            
+            .print-only {
+                display: block !important;
+            }
+            
+            body {
+                background: white !important;
+            }
+            
+            .dashboard {
+                box-shadow: none !important;
+                border: none !important;
+            }
+
+            .chart-to-print {
+                display: block !important;
+                width: 100% !important;
+                height: auto !important;
+                margin: 20px 0;
+            }
+        }
+        
+        .animate-in {
+            animation: fadeInUp 0.6s ease-out;
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .slide-in {
+            animation: slideIn 0.5s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        .hover-scale:hover {
+            transform: scale(1.03);
+            transition: transform 0.3s ease;
+        }
+        
+        .data-table {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .data-table::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .data-table::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        
+        .data-table::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        
+        .data-table::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        .filter-dropdown {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            border-radius: 0.5rem;
+            background-color: white;
+            z-index: 10;
+        }
+
+        .centered-cell {
+            text-align: center;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <header class="text-center mb-8">
+            <div class="bg-white rounded-2xl shadow-xl p-6 mb-6 no-print">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4 space-x-reverse">
+                        <div class="bg-gradient-to-r from-blue-500 to-indigo-600 p-3 rounded-xl text-white">
+                            <i class="fas fa-chart-line text-2xl"></i>
+                        </div>
+                        <div>
+                            <h1 class="text-3xl font-bold text-gray-800">SAEIDHM</h1>
+                            <p class="text-gray-600">نظام تحليل البيانات الاحترافي</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-4 space-x-reverse">
+                        <button onclick="window.open('dashboard.html', '_blank')" class="bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-300 flex items-center space-x-2 space-x-reverse shadow-lg hover:shadow-xl no-print">
+                            <i class="fas fa-tachometer-alt"></i>
+                            <span>لوحة التحكم</span>
+                        </button>
+                        <button onclick="printDashboard()" class="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-300 flex items-center space-x-2 space-x-reverse shadow-lg hover:shadow-xl no-print">
+                            <i class="fas fa-print"></i>
+                            <span>طباعة التقرير</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="print-only text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">SAEIDHM</h1>
+            <p class="text-xl text-gray-600">تقرير تحليل البيانات</p>
+            <p class="text-sm text-gray-500 mt-2">تم إنشاء التقرير في: <span id="printDate"></span></p>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-xl p-6 mb-6 no-print">
+            <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                <i class="fas fa-database ml-2 text-blue-500"></i>
+                مصدر البيانات
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">تحميل ملف إكسل</label>
+                    <input type="file" id="excelFile" accept=".xlsx, .xls" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">رابط موقع (CSV)</label>
+                    <div class="flex">
+                        <input type="text" id="urlInput" placeholder="أدخل رابط CSV..." class="flex-1 p-2 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <button onclick="loadFromURL()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 rounded-r-lg transition-colors">
+                            <i class="fas fa-link"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">إدخال يدوي</label>
+                    <button onclick="openManualInput()" class="w-full bg-gray-500 hover:bg-gray-600 text-white p-2 rounded-lg transition-colors">
+                        <i class="fas fa-keyboard ml-2"></i>
+                        إدخال بيانات
+                    </button>
+                </div>
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">تنظيف البيانات</label>
+                    <button onclick="cleanData()" class="w-full bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg transition-colors">
+                        <i class="fas fa-eraser ml-2"></i>
+                        تنظيف الخانات الفارغة
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-xl p-6 mb-6 no-print">
+            <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                <i class="fas fa-chart-line ml-2 text-indigo-500"></i>
+                تحليل ومقارنة الأعمدة
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">العمود للتحليل</label>
+                    <select id="analysisColumn" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" onchange="analyzeColumn()">
+                        <option value="">اختر عمود...</option>
+                    </select>
+                </div>
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">العمود للمقارنة 1</label>
+                    <select id="compareColumn1" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" onchange="compareColumns()">
+                        <option value="">اختر عمود...</option>
+                    </select>
+                </div>
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">العمود للمقارنة 2</label>
+                    <select id="compareColumn2" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" onchange="compareColumns()">
+                        <option value="">اختر عمود...</option>
+                    </select>
+                </div>
+            </div>
+            <div id="comparisonCharts" class="mt-6 hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white rounded-2xl shadow-lg p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                                <i class="fas fa-chart-bar ml-2 text-pink-500"></i>
+                                مقارنة القيم
+                            </h3>
+                            <div class="flex space-x-2 space-x-reverse">
+                                <button onclick="toggleChartVisibility('comparisonBarChart')" class="text-gray-500 hover:text-gray-700 transition-colors">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button onclick="printChart('comparisonBarChart', 'مقارنة القيم')" class="text-gray-500 hover:text-gray-700 transition-colors">
+                                    <i class="fas fa-print"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="comparisonBarChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-2xl shadow-lg p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                                <i class="fas fa-chart-line ml-2 text-teal-500"></i>
+                                الفرق بين القيم
+                            </h3>
+                            <div class="flex space-x-2 space-x-reverse">
+                                <button onclick="toggleChartVisibility('differenceLineChart')" class="text-gray-500 hover:text-gray-700 transition-colors">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button onclick="printChart('differenceLineChart', 'الفرق بين القيم')" class="text-gray-500 hover:text-gray-700 transition-colors">
+                                    <i class="fas fa-print"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="differenceLineChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-xl p-6 mb-6 no-print">
+            <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                <i class="fas fa-check-square ml-2 text-purple-500"></i>
+                اختيار الأعمدة للتحليل
+            </h2>
+            <div id="columnCheckboxes" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                </div>
+            <button onclick="updateChartsBasedOnSelection()" class="mt-4 bg-purple-500 hover:bg-purple-600 text-white px-6 py-2 rounded-lg transition-colors w-full md:w-auto">
+                تحديث الرسوم البيانية
+            </button>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-xl p-6 mb-6 no-print">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-bold text-gray-800 flex items-center">
+                    <i class="fas fa-filter ml-2 text-green-500"></i>
+                    الفلاتر والفرز
+                </h2>
+                <button onclick="toggleFilterPanel()" class="text-gray-500 hover:text-gray-700 transition-colors">
+                    <i id="filterToggleIcon" class="fas fa-eye-slash"></i>
+                </button>
+            </div>
+            <div id="filterPanel" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">العمود للفرز</label>
+                    <select id="sortColumn" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" onchange="applyFilters()">
+                        <option value="">اختر عمود...</option>
+                    </select>
+                </div>
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">نوع الفرز</label>
+                    <select id="sortOrder" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" onchange="applyFilters()">
+                        <option value="asc">تصاعدي</option>
+                        <option value="desc">تنازلي</option>
+                    </select>
+                </div>
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">البحث</label>
+                    <input type="text" id="searchInput" placeholder="ابحث في البيانات..." class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" oninput="applyFilters()">
+                </div>
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-gray-700">عدد الصفوف</label>
+                    <select id="rowsPerPage" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" onchange="applyFilters()">
+                        <option value="10">10</option>
+                        <option value="25" selected>25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+            <div class="bg-white rounded-2xl shadow-lg p-6 hover-scale animate-in" style="animation-delay: 0.1s">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">إجمالي السجلات</p>
+                        <h3 id="totalRecords" class="text-3xl font-bold text-gray-800 mt-1">0</h3>
+                    </div>
+                    <div class="bg-blue-100 p-3 rounded-xl">
+                        <i class="fas fa-database text-blue-500 text-2xl"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-2xl shadow-lg p-6 hover-scale animate-in" style="animation-delay: 0.2s">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">متوسط القيم</p>
+                        <h3 id="averageValue" class="text-3xl font-bold text-gray-800 mt-1">0</h3>
+                    </div>
+                    <div class="bg-green-100 p-3 rounded-xl">
+                        <i class="fas fa-calculator text-green-500 text-2xl"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-2xl shadow-lg p-6 hover-scale animate-in" style="animation-delay: 0.3s">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">أعلى قيمة</p>
+                        <h3 id="maxValue" class="text-3xl font-bold text-gray-800 mt-1">0</h3>
+                    </div>
+                    <div class="bg-red-100 p-3 rounded-xl">
+                        <i class="fas fa-arrow-up text-red-500 text-2xl"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-2xl shadow-lg p-6 hover-scale animate-in" style="animation-delay: 0.4s">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">أقل قيمة</p>
+                        <h3 id="minValue" class="text-3xl font-bold text-gray-800 mt-1">0</h3>
+                    </div>
+                    <div class="bg-purple-100 p-3 rounded-xl">
+                        <i class="fas fa-arrow-down text-purple-500 text-2xl"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-2xl shadow-lg p-6 hover-scale animate-in" style="animation-delay: 0.5s">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">الوسيط</p>
+                        <h3 id="medianValue" class="text-3xl font-bold text-gray-800 mt-1">0</h3>
+                    </div>
+                    <div class="bg-yellow-100 p-3 rounded-xl">
+                        <i class="fas fa-chart-line text-yellow-500 text-2xl"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <div class="bg-white rounded-2xl shadow-lg p-6" id="barChartContainer">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                        <i class="fas fa-chart-bar ml-2 text-blue-500"></i>
+                        توزيع البيانات
+                    </h3>
+                    <div class="flex space-x-2 space-x-reverse">
+                        <button onclick="toggleChartVisibility('barChartContainer')" class="text-gray-500 hover:text-gray-700 transition-colors">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button onclick="printChart('barChart', 'توزيع البيانات')" class="text-gray-500 hover:text-gray-700 transition-colors">
+                            <i class="fas fa-print"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="barChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-2xl shadow-lg p-6" id="pieChartContainer">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                        <i class="fas fa-chart-pie ml-2 text-green-500"></i>
+                        النسب المئوية
+                    </h3>
+                    <div class="flex space-x-2 space-x-reverse">
+                        <button onclick="toggleChartVisibility('pieChartContainer')" class="text-gray-500 hover:text-gray-700 transition-colors">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button onclick="printChart('pieChart', 'النسب المئوية')" class="text-gray-500 hover:text-gray-700 transition-colors">
+                            <i class="fas fa-print"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="pieChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <div class="bg-white rounded-2xl shadow-lg p-6" id="lineChartContainer">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                        <i class="fas fa-chart-line ml-2 text-purple-500"></i>
+                        الاتجاهات الزمنية
+                    </h3>
+                    <div class="flex space-x-2 space-x-reverse">
+                        <button onclick="toggleChartVisibility('lineChartContainer')" class="text-gray-500 hover:text-gray-700 transition-colors">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button onclick="printChart('lineChart', 'الاتجاهات الزمنية')" class="text-gray-500 hover:text-gray-700 transition-colors">
+                            <i class="fas fa-print"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="lineChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-2xl shadow-lg p-6" id="areaChartContainer">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                        <i class="fas fa-chart-area ml-2 text-orange-500"></i>
+                        التوزيع التراكمي
+                    </h3>
+                    <div class="flex space-x-2 space-x-reverse">
+                        <button onclick="toggleChartVisibility('areaChartContainer')" class="text-gray-500 hover:text-gray-700 transition-colors">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button onclick="printChart('areaChart', 'التوزيع التراكمي')" class="text-gray-500 hover:text-gray-700 transition-colors">
+                            <i class="fas fa-print"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="areaChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
+            <button onclick="openReportModal()" class="w-full bg-cyan-500 hover:bg-cyan-600 text-white p-4 rounded-lg text-lg font-semibold transition-colors">
+                <i class="fas fa-file-alt ml-2"></i>
+                كتابة تقرير شامل
+            </button>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                    <i class="fas fa-table ml-2 text-gray-500"></i>
+                    جدول البيانات
+                </h3>
+                <div class="flex space-x-2 space-x-reverse">
+                    <button onclick="exportToCSV()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm transition-colors flex items-center">
+                        <i class="fas fa-file-csv ml-1"></i>
+                        CSV
+                    </button>
+                    <button onclick="exportToExcel()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm transition-colors flex items-center">
+                        <i class="fas fa-file-excel ml-1"></i>
+                        Excel
+                    </button>
+                </div>
+            </div>
+            <div class="data-table">
+                <table id="dataTable" class="w-full text-center">
+                    <thead>
+                        <tr class="bg-gray-50 border-b-2 border-gray-200">
+                            <th class="px-4 py-3 text-sm font-semibold text-gray-700 text-center">الرقم</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="px-4 py-3 text-center text-gray-500" colspan="100%">يرجى تحميل بيانات للعرض</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="pagination" class="flex justify-center mt-4 space-x-2 space-x-reverse">
+                </div>
+        </div>
+
+        <div id="manualInputModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+            <div class="bg-white rounded-2xl p-6 w-11/12 md:w-3/4 lg:w-1/2 max-h-screen overflow-y-auto">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold text-gray-800">إدخال بيانات يدوي</h3>
+                    <button onclick="closeManualInput()" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times text-2xl"></i>
+                    </button>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">عدد الأعمدة</label>
+                    <input type="number" id="columnCount" value="3" min="1" max="10" class="w-full p-2 border border-gray-300 rounded-lg mb-4">
+                    <button onclick="generateInputFields()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
+                        توليد الحقول
+                    </button>
+                </div>
+                <div id="inputFieldsContainer">
+                    </div>
+                <div class="flex justify-end space-x-2 space-x-reverse mt-6">
+                    <button onclick="closeManualInput()" class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-lg transition-colors">
+                        إلغاء
+                    </button>
+                    <button onclick="processManualData()" class="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg transition-colors">
+                        معالجة البيانات
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="reportModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+            <div class="bg-white rounded-2xl p-6 w-11/12 md:w-3/4 lg:w-1/2 max-h-screen overflow-y-auto">
+                <div class="flex justify-between items-center mb-4 no-print-modal">
+                    <h3 class="text-xl font-bold text-gray-800">تقرير شامل</h3>
+                    <button onclick="closeReportModal()" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times text-2xl"></i>
+                    </button>
+                </div>
+                <div class="flex space-x-2 space-x-reverse mb-4 no-print-modal">
+                    <button onclick="generateAutomaticReport()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg">
+                        تقرير تلقائي
+                    </button>
+                    <button onclick="generateManualReport()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg">
+                        تقرير يدوي
+                    </button>
+                    <button onclick="printReport()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg">
+                        طباعة
+                    </button>
+                </div>
+                <div id="reportContent" class="prose max-w-none text-right">
+                    </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Global variables
+        let data = [];
+        let originalData = [];
+        let columns = [];
+        let barChart, pieChart, lineChart, areaChart;
+        let comparisonBarChart, differenceLineChart;
+        let currentPage = 1;
+        let rowsPerPage = 25;
+        let selectedColumns = [];
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeCharts();
+            updateStatistics();
+            document.getElementById('printDate').textContent = new Date().toLocaleDateString('ar-SA');
+            document.getElementById('excelFile').addEventListener('change', handleFileUpload);
+            const savedData = localStorage.getItem('saeidhmData');
+            if (savedData) {
+                originalData = JSON.parse(savedData);
+                data = [...originalData];
+                columns = Object.keys(data[0] || {});
+                populateColumnSelectors();
+                generateColumnCheckboxes();
+                applyFilters();
+            }
+        });
+
+        // Initialize all charts
+        function initializeCharts() {
+            const barCtx = document.getElementById('barChart').getContext('2d');
+            const pieCtx = document.getElementById('pieChart').getContext('2d');
+            const lineCtx = document.getElementById('lineChart').getContext('2d');
+            const areaCtx = document.getElementById('areaChart').getContext('2d');
+            const comparisonBarCtx = document.getElementById('comparisonBarChart').getContext('2d');
+            const differenceLineCtx = document.getElementById('differenceLineChart').getContext('2d');
+
+            const defaultChartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top' },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += new Intl.NumberFormat('ar-SA').format(context.parsed.y);
+                                } else {
+                                    label += new Intl.NumberFormat('ar-SA').format(context.parsed);
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true },
+                    x: {}
+                }
+            };
+
+            barChart = new Chart(barCtx, { type: 'bar', data: { labels: ['لا توجد بيانات'], datasets: [{ label: 'القيم', data: [0] }] }, options: defaultChartOptions });
+            pieChart = new Chart(pieCtx, { type: 'pie', data: { labels: ['لا توجد بيانات'], datasets: [{ data: [1], backgroundColor: ['#3b82f6', '#10b981', '#f97316', '#ef4444', '#8b5cf6', '#a855f7', '#ec4899', '#fde047', '#22d3ee', '#14b8a6'] }] }, options: { ...defaultChartOptions, scales: { y: { display: false }, x: { display: false } }, plugins: { ...defaultChartOptions.plugins, tooltip: { callbacks: { label: function(context) { const label = context.label || ''; const total = context.dataset.data.reduce((sum, value) => sum + value, 0); const value = context.parsed; const percentage = ((value / total) * 100).toFixed(2); return `${label}: ${value} (${percentage}%)`; } } } } } });
+            lineChart = new Chart(lineCtx, { type: 'line', data: { labels: ['لا توجد بيانات'], datasets: [{ label: 'الاتجاه', data: [0], borderColor: 'rgba(139, 92, 246, 1)', backgroundColor: 'rgba(139, 92, 246, 0.1)', tension: 0.4, fill: true }] }, options: defaultChartOptions });
+            areaChart = new Chart(areaCtx, { type: 'line', data: { labels: ['لا توجد بيانات'], datasets: [{ label: 'التراكمي', data: [0], borderColor: 'rgba(249, 115, 22, 1)', backgroundColor: 'rgba(249, 115, 22, 0.2)', tension: 0.4, fill: true }] }, options: defaultChartOptions });
+            comparisonBarChart = new Chart(comparisonBarCtx, { type: 'bar', data: { labels: [], datasets: [] }, options: defaultChartOptions });
+            differenceLineChart = new Chart(differenceLineCtx, { type: 'line', data: { labels: [], datasets: [] }, options: defaultChartOptions });
+        }
+
+        // --- Data Loading and Processing ---
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const workbook = XLSX.read(e.target.result, { type: 'binary' });
+                const sheetName = workbook.SheetNames[0];
+                const sheet = workbook.Sheets[sheetName];
+                const jsonData = XLSX.utils.sheet_to_json(sheet);
+                originalData = jsonData;
+                data = [...originalData];
+                columns = Object.keys(data[0] || {});
+                populateColumnSelectors();
+                generateColumnCheckboxes();
+                applyFilters();
+                saveData();
+            };
+            reader.readAsBinaryString(file);
+        }
+
+        function loadFromURL() {
+            const url = document.getElementById('urlInput').value;
+            if (!url) return;
+
+            Papa.parse(url, {
+                download: true,
+                header: true,
+                complete: function(results) {
+                    originalData = results.data;
+                    data = [...originalData];
+                    columns = Object.keys(data[0] || {});
+                    populateColumnSelectors();
+                    generateColumnCheckboxes();
+                    applyFilters();
+                    saveData();
+                }
+            });
+        }
+
+        function openManualInput() {
+            document.getElementById('manualInputModal').classList.remove('hidden');
+            generateInputFields();
+        }
+
+        function closeManualInput() {
+            document.getElementById('manualInputModal').classList.add('hidden');
+        }
+
+        function generateInputFields() {
+            const columnCount = document.getElementById('columnCount').value;
+            const container = document.getElementById('inputFieldsContainer');
+            container.innerHTML = '';
+
+            let html = '';
+            html += `<label class="block text-sm font-medium text-gray-700 mb-2">أسماء الأعمدة (بفاصلة):</label>`;
+            html += `<input type="text" id="manualColumnNames" placeholder="العمود1,العمود2,العمود3" class="w-full p-2 border border-gray-300 rounded-lg mb-4">`;
+
+            for (let i = 0; i < 5; i++) {
+                html += `<div class="flex space-x-2 space-x-reverse mb-2">`;
+                for (let j = 0; j < columnCount; j++) {
+                    html += `<input type="text" class="manual-input-field flex-1 p-2 border border-gray-300 rounded-lg" placeholder="خلية ${i+1}-${j+1}">`;
+                }
+                html += `</div>`;
+            }
+            container.innerHTML = html;
+        }
+
+        function processManualData() {
+            const columnNamesInput = document.getElementById('manualColumnNames').value;
+            const manualColumnNames = columnNamesInput.split(',').map(name => name.trim());
+            const fields = document.querySelectorAll('.manual-input-field');
+            const columnCount = document.getElementById('columnCount').value;
+
+            let newRecords = [];
+            let record = {};
+            fields.forEach((field, index) => {
+                const colIndex = index % columnCount;
+                record[manualColumnNames[colIndex] || `Column ${colIndex + 1}`] = field.value;
+                if (colIndex === columnCount - 1) {
+                    newRecords.push(record);
+                    record = {};
+                }
+            });
+
+            originalData = newRecords;
+            data = [...originalData];
+            columns = Object.keys(data[0] || {});
+            populateColumnSelectors();
+            generateColumnCheckboxes();
+            applyFilters();
+            closeManualInput();
+            saveData();
+        }
+
+        function cleanData() {
+            if (originalData.length === 0) {
+                alert('لا توجد بيانات لتنظيفها.');
+                return;
+            }
+            const cleaned = originalData.filter(row => Object.values(row).every(value => value !== null && value !== ''));
+            originalData = cleaned;
+            data = [...originalData];
+            applyFilters();
+            alert(`تم تنظيف ${originalData.length - data.length} سجل فارغ.`);
+            saveData();
+        }
+
+        function saveData() {
+            localStorage.setItem('saeidhmData', JSON.stringify(originalData));
+        }
+
+        // --- UI Population and Events ---
+        function populateColumnSelectors() {
+            const selects = ['sortColumn', 'analysisColumn', 'compareColumn1', 'compareColumn2'];
+            selects.forEach(id => {
+                const select = document.getElementById(id);
+                select.innerHTML = '<option value="">اختر عمود...</option>';
+                columns.forEach(col => {
+                    const option = document.createElement('option');
+                    option.value = col;
+                    option.textContent = col;
+                    select.appendChild(option);
+                });
+            });
+        }
+
+        function generateColumnCheckboxes() {
+            const container = document.getElementById('columnCheckboxes');
+            container.innerHTML = '';
+            selectedColumns = [];
+            columns.forEach(col => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center space-x-2 space-x-reverse';
+                div.innerHTML = `
+                    <input type="checkbox" id="checkbox-${col}" value="${col}" checked class="column-checkbox w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500">
+                    <label for="checkbox-${col}" class="text-sm font-medium text-gray-700">${col}</label>
+                `;
+                container.appendChild(div);
+            });
+            selectedColumns = columns;
+        }
+
+        // --- Filtering and Sorting ---
+        function applyFilters() {
+            let filteredData = [...originalData];
+
+            // Search Filter
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            if (searchTerm) {
+                filteredData = filteredData.filter(record =>
+                    Object.values(record).some(value =>
+                        String(value).toLowerCase().includes(searchTerm)
+                    )
+                );
+            }
+
+            // Sort
+            const sortColumn = document.getElementById('sortColumn').value;
+            const sortOrder = document.getElementById('sortOrder').value;
+            if (sortColumn) {
+                filteredData.sort((a, b) => {
+                    const valA = a[sortColumn];
+                    const valB = b[sortColumn];
+                    if (sortOrder === 'asc') {
+                        return (typeof valA === 'string' ? String(valA).localeCompare(String(valB)) : Number(valA) - Number(valB));
+                    } else {
+                        return (typeof valA === 'string' ? String(valB).localeCompare(String(valA)) : Number(valB) - Number(valA));
+                    }
+                });
+            }
+
+            data = filteredData;
+            currentPage = 1;
+            renderTable();
+            updateStatistics();
+            updateCharts();
+        }
+
+        function renderTable() {
+            const tableBody = document.querySelector('#dataTable tbody');
+            const start = (currentPage - 1) * rowsPerPage;
+            const end = start + rowsPerPage;
+            const paginatedData = data.slice(start, end);
+
+            tableBody.innerHTML = '';
+            if (data.length === 0) {
+                tableBody.innerHTML = `<tr><td class="px-4 py-3 text-center text-gray-500" colspan="${columns.length + 1}">لا توجد بيانات للعرض</td></tr>`;
+            } else {
+                renderTableHeader();
+                paginatedData.forEach((record, index) => {
+                    const row = document.createElement('tr');
+                    row.className = 'border-b border-gray-100 hover:bg-gray-50 transition-colors';
+                    row.innerHTML = `<td class="px-4 py-3 text-sm font-medium text-gray-900 centered-cell">${start + index + 1}</td>`;
+                    columns.forEach(col => {
+                        const cell = document.createElement('td');
+                        cell.className = 'px-4 py-3 text-sm text-gray-700 centered-cell';
+                        cell.textContent = record[col] || '';
+                        applyConditionalFormatting(cell, record[col]);
+                        row.appendChild(cell);
+                    });
+                    tableBody.appendChild(row);
+                });
+            }
+            renderPagination();
+        }
+
+        function applyConditionalFormatting(cell, value) {
+            const numericValue = Number(value);
+            if (isNaN(numericValue)) return;
+            const numericColumn = getFirstNumericColumn(data[0]);
+            if (!numericColumn) return;
+            
+            const allValues = data.map(rec => Number(rec[numericColumn])).filter(v => !isNaN(v));
+            if (allValues.length === 0) return;
+
+            const min = Math.min(...allValues);
+            const max = Math.max(...allValues);
+            const range = max - min;
+            const normalized = (numericValue - min) / range;
+
+            if (normalized < 0.33) {
+                cell.style.backgroundColor = 'rgba(252, 165, 165, 0.4)'; // Red
+            } else if (normalized < 0.66) {
+                cell.style.backgroundColor = 'rgba(253, 224, 138, 0.4)'; // Yellow
+            } else {
+                cell.style.backgroundColor = 'rgba(167, 243, 208, 0.4)'; // Green
+            }
+        }
+
+        function renderTableHeader() {
+            const tableHead = document.querySelector('#dataTable thead tr');
+            tableHead.innerHTML = '<th class="px-4 py-3 text-sm font-semibold text-gray-700 text-center">الرقم</th>';
+            columns.forEach(col => {
+                const th = document.createElement('th');
+                th.className = 'px-4 py-3 text-sm font-semibold text-gray-700 text-center';
+                th.textContent = col;
+                tableHead.appendChild(th);
+            });
+        }
+
+        function renderPagination() {
+            const paginationContainer = document.getElementById('pagination');
+            paginationContainer.innerHTML = '';
+            const totalPages = Math.ceil(data.length / rowsPerPage);
+
+            if (totalPages <= 1) return;
+
+            for (let i = 1; i <= totalPages; i++) {
+                const button = document.createElement('button');
+                button.className = `px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${i === currentPage ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`;
+                button.textContent = i;
+                button.onclick = () => {
+                    currentPage = i;
+                    renderTable();
+                };
+                paginationContainer.appendChild(button);
+            }
+        }
+
+        function toggleFilterPanel() {
+            const panel = document.getElementById('filterPanel');
+            const icon = document.getElementById('filterToggleIcon');
+            panel.classList.toggle('hidden');
+            icon.classList.toggle('fa-eye');
+            icon.classList.toggle('fa-eye-slash');
+        }
+
+        function toggleChartVisibility(containerId) {
+            const container = document.getElementById(containerId);
+            container.classList.toggle('hidden');
+            const icon = container.querySelector('button i');
+            if (container.classList.contains('hidden')) {
+                icon.classList.remove('fa-eye');
+                icon.classList.add('fa-eye-slash');
+            } else {
+                icon.classList.remove('fa-eye-slash');
+                icon.classList.add('fa-eye');
+            }
+        }
+
+        // --- Statistical Analysis and Charts ---
+        function updateStatistics(statsData = data) {
+            document.getElementById('totalRecords').textContent = statsData.length;
+            if (statsData.length === 0) {
+                document.getElementById('averageValue').textContent = 'N/A';
+                document.getElementById('maxValue').textContent = 'N/A';
+                document.getElementById('minValue').textContent = 'N/A';
+                document.getElementById('medianValue').textContent = 'N/A';
+                return;
+            }
+
+            const numericValues = statsData.flatMap(record =>
+                Object.values(record).filter(val => !isNaN(Number(val)) && val !== '')
+            ).map(Number);
+
+            if (numericValues.length > 0) {
+                const sum = numericValues.reduce((a, b) => a + b, 0);
+                const avg = (sum / numericValues.length).toFixed(2);
+                const max = Math.max(...numericValues);
+                const min = Math.min(...numericValues);
+
+                numericValues.sort((a, b) => a - b);
+                const middle = Math.floor(numericValues.length / 2);
+                const median = numericValues.length % 2 === 0
+                    ? (numericValues[middle - 1] + numericValues[middle]) / 2
+                    : numericValues[middle];
+
+                document.getElementById('averageValue').textContent = avg;
+                document.getElementById('maxValue').textContent = max;
+                document.getElementById('minValue').textContent = min;
+                document.getElementById('medianValue').textContent = median;
+            } else {
+                document.getElementById('averageValue').textContent = 'N/A';
+                document.getElementById('maxValue').textContent = 'N/A';
+                document.getElementById('minValue').textContent = 'N/A';
+                document.getElementById('medianValue').textContent = 'N/A';
+            }
+        }
+
+        function updateCharts(chartData = data) {
+            if (chartData.length === 0 || Object.keys(chartData[0]).length === 0) {
+                updateChart(barChart, ['لا توجد بيانات'], [0]);
+                updateChart(pieChart, ['لا توجد بيانات'], [1]);
+                updateChart(lineChart, ['لا توجد بيانات'], [0]);
+                updateChart(areaChart, ['لا توجد بيانات'], [0]);
+                return;
+            }
+
+            const numericColumn = getFirstNumericColumn(chartData[0]);
+            if (!numericColumn) {
+                console.warn("No numeric column found for charts.");
+                updateChart(barChart, ['لا توجد بيانات'], [0]);
+                updateChart(pieChart, ['لا توجد بيانات'], [1]);
+                updateChart(lineChart, ['لا توجد بيانات'], [0]);
+                updateChart(areaChart, ['لا توجد بيانات'], [0]);
+                return;
+            }
+
+            const values = chartData.map(record => Number(record[numericColumn])).filter(v => !isNaN(v));
+            const labels = chartData.map(record => record[Object.keys(record).find(key => key !== numericColumn) || Object.keys(record)[0]]);
+            const uniqueLabels = [...new Set(labels)];
+            const labelCounts = uniqueLabels.map(label => labels.filter(l => l === label).length);
+
+            // Bar Chart
+            const barLabels = uniqueLabels;
+            const barData = uniqueLabels.map(label => {
+                const subset = chartData.filter(record => record[Object.keys(record).find(key => key !== numericColumn) || Object.keys(record)[0]] === label);
+                const subsetValues = subset.map(s => Number(s[numericColumn])).filter(v => !isNaN(v));
+                return subsetValues.reduce((sum, val) => sum + val, 0) / subsetValues.length;
+            });
+            updateChart(barChart, barLabels, barData, { label: `متوسط ${numericColumn}` });
+
+            // Pie Chart
+            updateChart(pieChart, uniqueLabels, labelCounts, { label: 'النسبة المئوية' });
+
+            // Line Chart
+            updateChart(lineChart, labels, values, { label: numericColumn });
+
+            // Area Chart (Cumulative Sum)
+            let cumulativeSum = 0;
+            const cumulativeData = values.map(v => cumulativeSum += v);
+            updateChart(areaChart, labels, cumulativeData, { label: 'التراكمي' });
+        }
+
+        function updateChart(chart, labels, data, datasetOptions = {}) {
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = data;
+            Object.assign(chart.data.datasets[0], datasetOptions);
+            chart.update();
+        }
+
+        function getFirstNumericColumn(record) {
+            for (const key in record) {
+                if (!isNaN(Number(record[key]))) {
+                    return key;
+                }
+            }
+            return null;
+        }
+
+        function analyzeColumn() {
+            const selectedColumn = document.getElementById('analysisColumn').value;
+            if (!selectedColumn) return;
+
+            const numericValues = data.map(record => Number(record[selectedColumn])).filter(val => !isNaN(val));
+
+            if (numericValues.length === 0) {
+                alert('العمود المختار لا يحتوي على قيم رقمية للتحليل.');
+                return;
+            }
+
+            // Calculate and display statistics for the selected column
+            const sum = numericValues.reduce((a, b) => a + b, 0);
+            const avg = (sum / numericValues.length).toFixed(2);
+            const max = Math.max(...numericValues);
+            const min = Math.min(...numericValues);
+
+            numericValues.sort((a, b) => a - b);
+            const middle = Math.floor(numericValues.length / 2);
+            const median = numericValues.length % 2 === 0
+                ? (numericValues[middle - 1] + numericValues[middle]) / 2
+                : numericValues[middle];
+            
+            document.getElementById('averageValue').textContent = avg;
+            document.getElementById('maxValue').textContent = max;
+            document.getElementById('minValue').textContent = min;
+            document.getElementById('medianValue').textContent = median;
+            document.getElementById('totalRecords').textContent = numericValues.length;
+            
+            // Update charts based on the selected column
+            const labels = data.map(record => record[Object.keys(record).find(key => key !== selectedColumn) || Object.keys(record)[0]]);
+            const values = data.map(record => Number(record[selectedColumn]));
+
+            updateChart(barChart, labels, values, { label: selectedColumn });
+            updateChart(lineChart, labels, values, { label: selectedColumn });
+            
+            const valueCounts = {};
+            values.forEach(val => {
+                valueCounts[val] = (valueCounts[val] || 0) + 1;
+            });
+            updateChart(pieChart, Object.keys(valueCounts), Object.values(valueCounts), { label: selectedColumn });
+
+            let cumulativeSum = 0;
+            const cumulativeData = values.map(v => cumulativeSum += v);
+            updateChart(areaChart, labels, cumulativeData, { label: 'التراكمي' });
+        }
+
+        function compareColumns() {
+            const col1 = document.getElementById('compareColumn1').value;
+            const col2 = document.getElementById('compareColumn2').value;
+
+            if (!col1 || !col2) {
+                document.getElementById('comparisonCharts').classList.add('hidden');
+                return;
+            }
+
+            document.getElementById('comparisonCharts').classList.remove('hidden');
+
+            const values1 = data.map(record => Number(record[col1])).filter(v => !isNaN(v));
+            const values2 = data.map(record => Number(record[col2])).filter(v => !isNaN(v));
+            const labels = data.map((record, index) => index + 1);
+
+            // Comparison Bar Chart
+            comparisonBarChart.data.labels = labels;
+            comparisonBarChart.data.datasets = [
+                {
+                    label: col1,
+                    data: values1,
+                    backgroundColor: 'rgba(59, 130, 246, 0.7)'
+                },
+                {
+                    label: col2,
+                    data: values2,
+                    backgroundColor: 'rgba(239, 68, 68, 0.7)'
+                }
+            ];
+            comparisonBarChart.update();
+
+            // Difference Line Chart
+            const differences = values1.map((val, index) => val - (values2[index] || 0));
+            differenceLineChart.data.labels = labels;
+            differenceLineChart.data.datasets = [
+                {
+                    label: `الفرق (${col1} - ${col2})`,
+                    data: differences,
+                    borderColor: 'rgba(234, 179, 8, 1)',
+                    backgroundColor: 'rgba(234, 179, 8, 0.2)',
+                    tension: 0.4,
+                    fill: false
+                }
+            ];
+            differenceLineChart.update();
+        }
+
+        function updateChartsBasedOnSelection() {
+            const selected = Array.from(document.querySelectorAll('.column-checkbox:checked')).map(cb => cb.value);
+            if (selected.length === 0) {
+                alert('الرجاء اختيار عمود واحد على الأقل.');
+                return;
+            }
+            selectedColumns = selected;
+
+            const filteredData = data.map(record => {
+                let newRecord = {};
+                selectedColumns.forEach(col => {
+                    newRecord[col] = record[col];
+                });
+                return newRecord;
+            });
+
+            updateCharts(filteredData);
+            updateStatistics(filteredData);
+        }
+
+        // --- Export & Print Functions ---
+        function exportToCSV() {
+            const csv = Papa.unparse(data);
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'data.csv';
+            link.click();
+        }
+
+        function exportToExcel() {
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+            XLSX.writeFile(wb, "data.xlsx");
+        }
+
+        function printDashboard() {
+            window.print();
+        }
+
+        function printChart(chartId, title) {
+            const chartCanvas = document.getElementById(chartId);
+            const dataURL = chartCanvas.toDataURL('image/png');
+            
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write('<html><head><title>' + title + '</title>');
+            printWindow.document.write('<style>body { font-family: \'Cairo\', sans-serif; text-align: center; margin: 40px; } h1 { color: #333; } img { max-width: 100%; height: auto; }</style>');
+            printWindow.document.write('</head><body>');
+            printWindow.document.write('<h1>' + title + '</h1>');
+            printWindow.document.write('<img src="' + dataURL + '"/>');
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+            printWindow.focus();
+            setTimeout(() => {
+                printWindow.print();
+                printWindow.close();
+            }, 500);
+        }
+
+        // --- Report Modal Functions ---
+        function openReportModal() {
+            document.getElementById('reportModal').classList.remove('hidden');
+            generateAutomaticReport();
+        }
+
+        function closeReportModal() {
+            document.getElementById('reportModal').classList.add('hidden');
+        }
+
+        function generateAutomaticReport() {
+            const reportContent = document.getElementById('reportContent');
+            const totalRecords = document.getElementById('totalRecords').textContent;
+            const avg = document.getElementById('averageValue').textContent;
+            const max = document.getElementById('maxValue').textContent;
+            const min = document.getElementById('minValue').textContent;
+            const median = document.getElementById('medianValue').textContent;
+
+            const numericColumn = getFirstNumericColumn(data[0]);
+            let analysisSection = '<h3>لا توجد بيانات رقمية للتحليل.</h3>';
+            if (numericColumn) {
+                analysisSection = `
+                    <h3>تحليل العمود: ${numericColumn}</h3>
+                    <p>المتوسط الحسابي: ${avg}</p>
+                    <p>أعلى قيمة: ${max}</p>
+                    <p>أقل قيمة: ${min}</p>
+                    <p>الوسيط: ${median}</p>
+                `;
+            }
+
+            reportContent.innerHTML = `
+                <h2>تقرير البيانات التلقائي</h2>
+                <p>هذا التقرير يوضح ملخصًا لأهم الإحصائيات المستخلصة من البيانات.</p>
+                <h3>ملخص عام</h3>
+                <p>عدد السجلات الإجمالي: ${totalRecords}</p>
+                ${analysisSection}
+                <p>تم إعداد هذا التقرير تلقائيًا بتاريخ ${new Date().toLocaleDateString('ar-SA')}.</p>
+            `;
+        }
+
+        function generateManualReport() {
+            const reportContent = document.getElementById('reportContent');
+            reportContent.innerHTML = `
+                <h2>تقرير يدوي</h2>
+                <textarea id="manualReportTextarea" class="w-full h-80 p-4 border rounded-lg" placeholder="اكتب تقريرك هنا..."></textarea>
+            `;
+        }
+        
+        function printReport() {
+            const printWindow = window.open('', '_blank');
+            const modalContent = document.getElementById('reportModal').innerHTML;
+            printWindow.document.write('<html><head><title>تقرير البيانات</title>');
+            printWindow.document.write('<link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">');
+            printWindow.document.write('<style>@media print { .no-print-modal { display: none; } body { font-family: \'Cairo\', sans-serif; } }</style>');
+            printWindow.document.write('</head><body class="p-8">');
+            printWindow.document.write(modalContent);
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+            printWindow.focus();
+            setTimeout(() => {
+                printWindow.print();
+                printWindow.close();
+            }, 500);
+        }
+
+    </script>
+</body>
+</html>
